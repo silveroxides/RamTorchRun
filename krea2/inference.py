@@ -555,6 +555,16 @@ def main() -> int:
                     help="Scratch weights file for --offload-nvme. Put it on a real "
                          "NVMe drive: /tmp is often tmpfs (RAM), which silently "
                          "defeats the point. Deleted when the model closes.")
+    ap.add_argument("--offload-nvme-io", choices=["auto", "python", "aimdo"],
+                    default="auto",
+                    help="NVMe reader: portable async pinned-buffer path (auto/python) "
+                         "or AIMDO's native reader (aimdo, inference-only; launch "
+                         "this script through ramtorch-aimdo before Torch imports).")
+    ap.add_argument("--offload-residency", choices=["stream", "aimdo-vbar"],
+                    default="stream",
+                    help="Inference weight residency policy. aimdo-vbar is an "
+                         "experimental AIMDO cache for repeated/dynamic model use; "
+                         "launch through ramtorch-aimdo.")
     ap.add_argument("--profile", default=None, metavar="PATH",
                     help="Capture a Chrome/Perfetto trace of a few diffusion "
                          "steps to PATH (works with --offload and --pipeline). "
@@ -582,6 +592,10 @@ def main() -> int:
                  "RamTorch's pipeline stages have no NVMe tier.")
     if args.offload_nvme and not args.offload_nvme_path:
         ap.error("--offload-nvme requires --offload-nvme-path")
+    if args.offload_nvme_io == "aimdo" and not args.offload_nvme:
+        ap.error("--offload-nvme-io aimdo requires --offload-nvme")
+    if args.offload_residency == "aimdo-vbar" and (not args.offload or args.pipeline):
+        ap.error("--offload-residency aimdo-vbar requires single-GPU --offload")
     if not (0 <= args.shard < args.num_shards):
         ap.error(f"--shard {args.shard} out of range for --num-shards {args.num_shards}")
 
@@ -811,6 +825,8 @@ def main() -> int:
             pin=args.offload_pin,
             nvme=args.offload_nvme,
             nvme_path=args.offload_nvme_path,
+            nvme_io_backend=args.offload_nvme_io,
+            residency_backend=args.offload_residency,
         ).eval()
         if args.offload_nvme:
             print(f"[infer]   NVMe tier: {len(offload_model.nvme_layers)} chunk(s) "

@@ -88,6 +88,10 @@ Adding an execution mode means adding a flag, never a second trainer.
   pipeline stages have no NVMe tier). Supports `--num-shards/--shard` for
   data-parallel fan-out of a prompt list, and
   `--profile/--profile-steps/--profile-warmup` for Perfetto traces.
+  The direct single-GPU offload path also exposes `--offload-nvme-io`
+  (`auto`/portable Python or explicit AIMDO native I/O) and experimental
+  `--offload-residency aimdo-vbar`; AIMDO cases must launch through
+  `ramtorch-aimdo` before PyTorch imports and are inference-only.
 - `tools/check_chunk_parity.py` — tiny model on CPU, chunked vs monolithic,
   forward AND every gradient, across 18 execution configurations. Seconds to
   run; all 18 bit-exact. Run it after any change to the dicing or relay.
@@ -148,3 +152,6 @@ Adding an execution mode means adding a flag, never a second trainer.
       prompt/seed).
 - [ ] Reduce offload full-FT optimizer cost (e.g. 8-bit or sharded CPU
       optimizer state) — currently the dominant per-step cost.
+- [ ] Benchmark `stream`, NVMe Python, NVMe AIMDO, and AIMDO VBAR with
+      `krea2/tools/benchmark_offload_matrix.py`; retain experimental modes
+      only if their end-to-end K2 result beats the portable baseline.

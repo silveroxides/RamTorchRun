@@ -485,3 +485,16 @@ tdm_cfg still sets the magnitude anchor and loss normalizer in ratio mode.
 Same batch 12 x 8, grad_ckpt, teacher, dataset. tmux `tdm`,
 `runs/k2-tdm-512-r128/`. First steps: loss_g ~0.44-0.46 (ratio-mode scale),
 loss_d ~0.005, ~130 s/iter — rank 128 adds no measurable step cost.
+
+## 2026-08-22 — Optional AIMDO inference backends and benchmark matrix
+
+RamTorch now has portable direct NVMe reads into its existing pinned staging
+buffer (`nvme_io_backend="python"`, the `auto` default), plus opt-in
+inference-only AIMDO native NVMe I/O and experimental VBAR residency. The
+new `ramtorch-aimdo` launcher initializes AIMDO before Torch; use it for any
+AIMDO case. `krea2/inference.py` exposes `--offload-nvme-io` and
+`--offload-residency`, and `krea2/tools/benchmark_offload_matrix.py` runs a
+JSON command matrix with cold process timings. Do not use either AIMDO backend
+for training: full FT remains host optimizer/gradient-bound and VBAR eviction
+has synchronization risk. UEL informed the bounded-I/O design but is not a
+runtime dependency.
