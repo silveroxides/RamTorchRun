@@ -469,9 +469,14 @@ def train(cfg: dict, config_path: str):
     # ------------------------------------------------------------------
     def _save_checkpoint(path: str, keys: set[str]):
         sd = dit.state_dict()
-        sd = {k: v.detach().cpu().contiguous() for k, v in sd.items() if k in keys}
+        sd = {k: v for k, v in sd.items() if k in keys}
         sd = _strip_compiled_keys(sd)
-        save_file(sd, path)
+        if cfg.get("checkpoint_writer", "safetensors") == "uel":
+            from ramtorch import save_safetensors_incremental
+            save_safetensors_incremental(path, sd)
+        else:
+            sd = {k: v.detach().cpu().contiguous() for k, v in sd.items()}
+            save_file(sd, path)
         print(f"[ckpt] Saved {len(sd)} tensors → {path}")
 
     def _save_all(tag: str, step: int):

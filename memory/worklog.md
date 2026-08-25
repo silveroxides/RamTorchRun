@@ -496,5 +496,14 @@ AIMDO case. `krea2/inference.py` exposes `--offload-nvme-io` and
 `--offload-residency`, and `krea2/tools/benchmark_offload_matrix.py` runs a
 JSON command matrix with cold process timings. Do not use either AIMDO backend
 for training: full FT remains host optimizer/gradient-bound and VBAR eviction
-has synchronization risk. UEL informed the bounded-I/O design but is not a
-runtime dependency.
+has synchronization risk. UEL is the portable async safetensors source and
+incremental checkpoint writer when the RamTorch `uel` extra is installed.
+
+## 2026-08-25 — UEL becomes the portable async I/O backend
+
+`--offload-uel --no-lora` maps diced base-model tensors back to their original
+safetensors checkpoint keys and streams them through UEL's bounded threaded
+reader in chunk order. `checkpoint_writer: "uel"` routes normal and TDM
+checkpoint writes through UEL's incremental writer, so CPU conversion and file
+writes fan out off the training caller. Use UEL for portable async I/O; AIMDO
+is only the optional native residency or file-reader experiment.

@@ -92,6 +92,9 @@ Adding an execution mode means adding a flag, never a second trainer.
   (`auto`/portable Python or explicit AIMDO native I/O) and experimental
   `--offload-residency aimdo-vbar`; AIMDO cases must launch through
   `ramtorch-aimdo` before PyTorch imports and are inference-only.
+  `--offload-uel` uses UEL's bounded asynchronous safetensors reader for
+  direct base-checkpoint streaming; `checkpoint_writer: "uel"` uses its
+  incremental threaded safetensors writer at checkpoint time.
 - `tools/check_chunk_parity.py` — tiny model on CPU, chunked vs monolithic,
   forward AND every gradient, across 18 execution configurations. Seconds to
   run; all 18 bit-exact. Run it after any change to the dicing or relay.

@@ -574,11 +574,16 @@ def train(cfg: dict, config_path: str):
 
     def _save_checkpoint(path: str):
         sd = lora_state_dict(dit) if mode == "lora" else dit.state_dict()
-        sd = {k: v.detach().cpu().contiguous() for k, v in sd.items()}
         sd = _strip_compiled_keys(sd)
         if path.endswith((".safetensors", ".sft")):
-            save_file(sd, path)
+            if cfg.get("checkpoint_writer", "safetensors") == "uel":
+                from ramtorch import save_safetensors_incremental
+                save_safetensors_incremental(path, sd)
+            else:
+                sd = {k: v.detach().cpu().contiguous() for k, v in sd.items()}
+                save_file(sd, path)
         else:
+            sd = {k: v.detach().cpu().contiguous() for k, v in sd.items()}
             torch.save(sd, path)
         print(f"[ckpt] Saved {len(sd)} tensors → {path}")
 

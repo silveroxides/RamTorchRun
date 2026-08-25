@@ -565,6 +565,13 @@ def main() -> int:
                     help="Inference weight residency policy. aimdo-vbar is an "
                          "experimental AIMDO cache for repeated/dynamic model use; "
                          "launch through ramtorch-aimdo.")
+    ap.add_argument("--offload-uel", action="store_true",
+                    help="Stream base checkpoint weights through the published "
+                         "unifiedefficientloader async safetensors backend. This "
+                         "overlaps bounded threaded disk I/O with RamTorch compute "
+                         "and currently requires --offload --no-lora.")
+    ap.add_argument("--offload-uel-prefetch", type=int, default=2,
+                    help="UEL queued prefetch batches (default 2).")
     ap.add_argument("--profile", default=None, metavar="PATH",
                     help="Capture a Chrome/Perfetto trace of a few diffusion "
                          "steps to PATH (works with --offload and --pipeline). "
@@ -596,6 +603,12 @@ def main() -> int:
         ap.error("--offload-nvme-io aimdo requires --offload-nvme")
     if args.offload_residency == "aimdo-vbar" and (not args.offload or args.pipeline):
         ap.error("--offload-residency aimdo-vbar requires single-GPU --offload")
+    if args.offload_uel and (not args.offload or args.pipeline):
+        ap.error("--offload-uel requires single-GPU --offload")
+    if args.offload_uel and args.offload_nvme:
+        ap.error("--offload-uel and --offload-nvme are alternative disk sources")
+    if args.offload_uel and not args.no_lora:
+        ap.error("--offload-uel currently requires --no-lora")
     if not (0 <= args.shard < args.num_shards):
         ap.error(f"--shard {args.shard} out of range for --num-shards {args.num_shards}")
 
@@ -811,6 +824,26 @@ def main() -> int:
         # stream through the GPU window.
         offload_chunks = build_dit_chunks(dit, blocks_per_chunk=args.blocks_per_chunk)
         head_chunk = offload_chunks[-1]
+        uel_key_map = None
+        if args.offload_uel:
+            # Chunks retain references to the original DiT parameters after
+            # dicing, so identity gives an exact checkpoint-key map without
+            # hard-coding K2 block naming.
+            source_names = {id(t): name for name, t in dit.named_parameters()}
+            source_names.update({id(t): name for name, t in dit.named_buffers()})
+            uel_key_map = {}
+            for chunk_index, chunk_module in enumerate(offload_chunks):
+                local = dict(chunk_module.named_parameters())
+                local.update(dict(chunk_module.named_buffers()))
+                for local_name, tensor in local.items():
+                    try:
+                        source_name = source_names[id(tensor)]
+                    except KeyError as exc:
+                        raise RuntimeError(
+                            f"UEL cannot map chunk {chunk_index}.{local_name} "
+                            "to a base-checkpoint tensor"
+                        ) from exc
+                    uel_key_map[f"{chunk_index}.{local_name}"] = source_name
         n_bytes = sum(chunk_bytes(c) for c in offload_chunks)
         held = (args.offload_window + args.offload_pin) * \
             max(chunk_bytes(c) for c in offload_chunks)
@@ -827,6 +860,9 @@ def main() -> int:
             nvme_path=args.offload_nvme_path,
             nvme_io_backend=args.offload_nvme_io,
             residency_backend=args.offload_residency,
+            uel_path=mmdit_ckpt if args.offload_uel else None,
+            uel_key_map=uel_key_map,
+            uel_prefetch_batches=args.offload_uel_prefetch,
         ).eval()
         if args.offload_nvme:
             print(f"[infer]   NVMe tier: {len(offload_model.nvme_layers)} chunk(s) "
